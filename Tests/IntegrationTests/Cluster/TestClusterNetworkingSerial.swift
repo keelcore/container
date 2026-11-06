@@ -63,6 +63,64 @@ struct TestClusterNetworkingSerial {
         print("[cluster-net] pod \(podName) is Ready")
     }
 
+    private func expectNodeMTU(_ f: ContainerFixture, nodes: [String], mtu: Int) throws {
+        for node in nodes {
+            let interface = try f.doExec(node, cmd: ["sh", "-c", "ip route show default | awk '{print $5}'"])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let output = try f.doExec(node, cmd: ["ip", "link", "show", interface])
+            #expect(output.contains("mtu \(mtu)"), "expected mtu \(mtu) on \(node): \(output)")
+        }
+    }
+
+    @Test func testClusterCreateMTU() async throws {
+        try await ContainerFixture.with { f in
+            let name = "cluster-\(f.testID)"
+            f.addCleanup { _ = try? f.run(["cluster", "delete", "--name", name]) }
+
+            try f.restoreWarmupImage(.kindestNodeV1_35_5)
+            try f.run(["cluster", "create", "--name", name, "--workers", "1", "--mtu", "1500"]).check()
+
+            try expectNodeMTU(f, nodes: [name, "\(name)-worker-1"], mtu: 1500)
+
+            let list = try f.run(["cluster", "list", "--format", "json"]).check()
+            let clusters = try #require(try JSONSerialization.jsonObject(with: list.outputData) as? [[String: Any]])
+            let cluster = try #require(clusters.first { ($0["id"] as? String) == name })
+            let configuration = try #require(cluster["configuration"] as? [String: Any])
+            #expect(configuration["mtu"] as? Int == 1500)
+        }
+    }
+
+    @available(macOS 26, *)
+    @Test func testClusterCreateOnANetwork() async throws {
+        try await ContainerFixture.with { f in
+            let name = "cluster-\(f.testID)"
+            let net = "\(f.testID)-net"
+            try f.doNetworkCreate(net, args: ["--mtu", "1500"])
+            f.addCleanup { f.doNetworkDeleteIfExists(net) }
+            f.addCleanup { _ = try? f.run(["cluster", "delete", "--name", name]) }
+
+            try f.restoreWarmupImage(.kindestNodeV1_35_5)
+            try f.run(["cluster", "create", "--name", name, "--network", net]).check()
+
+            let container = try f.inspectContainer(name)
+            #expect(container.networks.map(\.network) == [net])
+            try expectNodeMTU(f, nodes: [name], mtu: 1500)
+
+            let list = try f.run(["cluster", "list", "--format", "json"]).check()
+            let clusters = try #require(try JSONSerialization.jsonObject(with: list.outputData) as? [[String: Any]])
+            let cluster = try #require(clusters.first { ($0["id"] as? String) == name })
+            let configuration = try #require(cluster["configuration"] as? [String: Any])
+            #expect(configuration["mtu"] as? Int == 1500)
+        }
+    }
+
+    @Test func testClusterCreateRejectsAMACAddress() async throws {
+        try await ContainerFixture.with { f in
+            let result = try f.run(["cluster", "create", "--name", "cluster-\(f.testID)", "--network", "default,mac=02:42:ac:11:00:02"])
+            #expect(result.status != 0)
+        }
+    }
+
     // Verify that a pod schedules, reaches Running, and can be exec'd into.
     @Test func testPodsScheduleAndRun() async throws {
         try await ContainerFixture.with { f in

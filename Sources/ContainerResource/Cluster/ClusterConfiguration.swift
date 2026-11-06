@@ -74,6 +74,8 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
     public let remove: Bool
     /// Whether nodes use the host's image store (`--shared-image-store`).
     public let sharedImageStore: Bool
+    /// The MTU of the nodes' network interface, resolved at create time. Absent on older records.
+    public let mtu: UInt32?
     public let nodes: [NodeConfiguration]
     public let creationDate: Date
     public let labels: ResourceLabels
@@ -83,7 +85,7 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
     /// - Throws: `.invalidArgument` if the name, Kubernetes version or nodes are invalid.
     public init(
         name: String, kubernetesVersion: String, cni: String? = nil, fqdn: String? = nil,
-        remove: Bool = false, sharedImageStore: Bool = false, nodes: [NodeConfiguration], creationDate: Date = Date(), labels: ResourceLabels = .init()
+        remove: Bool = false, sharedImageStore: Bool = false, mtu: UInt32? = nil, nodes: [NodeConfiguration], creationDate: Date = Date(), labels: ResourceLabels = .init()
     ) throws {
         self.name = name
         self.kubernetesVersion = kubernetesVersion
@@ -91,6 +93,7 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
         self.fqdn = fqdn
         self.remove = remove
         self.sharedImageStore = sharedImageStore
+        self.mtu = mtu
         self.nodes = nodes
         self.creationDate = creationDate
         self.labels = labels
@@ -98,7 +101,7 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, kubernetesVersion, cni, fqdn, remove, sharedImageStore, nodes, creationDate, labels
+        case name, kubernetesVersion, cni, fqdn, remove, sharedImageStore, mtu, nodes, creationDate, labels
     }
 
     /// Decodes a cluster configuration, ignoring unknown keys and defaulting absent optional ones
@@ -111,6 +114,7 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
         fqdn = try container.decodeIfPresent(String.self, forKey: .fqdn)
         remove = try container.decodeIfPresent(Bool.self, forKey: .remove) ?? false
         sharedImageStore = try container.decodeIfPresent(Bool.self, forKey: .sharedImageStore) ?? false
+        mtu = try container.decodeIfPresent(UInt32.self, forKey: .mtu)
         nodes = try container.decode([NodeConfiguration].self, forKey: .nodes)
         creationDate = try container.decodeIfPresent(Date.self, forKey: .creationDate) ?? Date(timeIntervalSince1970: 0)
         labels = try container.decodeIfPresent(ResourceLabels.self, forKey: .labels) ?? ResourceLabels()
@@ -126,6 +130,7 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
         if let fqdn { try c.encode(fqdn, forKey: .fqdn) } else { try c.encodeNil(forKey: .fqdn) }
         try c.encode(remove, forKey: .remove)
         try c.encode(sharedImageStore, forKey: .sharedImageStore)
+        if let mtu { try c.encode(mtu, forKey: .mtu) } else { try c.encodeNil(forKey: .mtu) }
         try c.encode(nodes, forKey: .nodes)
         try c.encode(creationDate, forKey: .creationDate)
         try c.encode(labels, forKey: .labels)
@@ -184,7 +189,7 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
     /// single node carries both roles; otherwise workers are `<name>-worker-<n>`.
     public static func make(
         name: String, nodeImage: String, remove: Bool, sharedImageStore: Bool = false,
-        workers: UInt, cni: String?, fqdn: String?
+        workers: UInt, cni: String?, fqdn: String?, mtu: UInt32? = nil
     ) throws -> ClusterConfiguration {
         guard workers <= maxWorkers else {
             throw ContainerizationError(.invalidArgument, message: "a cluster may have at most \(maxWorkers) workers, got \(workers)")
@@ -198,6 +203,6 @@ public struct ClusterConfiguration: Codable, Sendable, Equatable, Identifiable {
         for i in 0..<Int(workers) {
             nodes.append(try NodeConfiguration(name: workerName(cluster: name, index: i + 1), roles: [workerRole]))
         }
-        return try ClusterConfiguration(name: name, kubernetesVersion: version, cni: cni, fqdn: fqdn, remove: remove, sharedImageStore: sharedImageStore, nodes: nodes)
+        return try ClusterConfiguration(name: name, kubernetesVersion: version, cni: cni, fqdn: fqdn, remove: remove, sharedImageStore: sharedImageStore, mtu: mtu, nodes: nodes)
     }
 }

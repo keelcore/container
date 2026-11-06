@@ -47,6 +47,19 @@ struct ClusterConfigurationTests {
         #expect(c.fqdn == "dev.test")
     }
 
+    @Test func mtuRoundTrips() throws {
+        let c = try ClusterConfiguration.make(
+            name: "dev", nodeImage: image, remove: false, workers: 0, cni: nil, fqdn: nil, mtu: 1500)
+        let decoded = try JSONDecoder().decode(ClusterConfiguration.self, from: JSONEncoder().encode(c))
+        #expect(decoded.mtu == 1500)
+    }
+
+    @Test func makeWithoutMTULeavesItNil() throws {
+        let c = try ClusterConfiguration.make(
+            name: "dev", nodeImage: image, remove: false, workers: 0, cni: nil, fqdn: nil)
+        #expect(c.mtu == nil)
+    }
+
     @Test func makeRejectsUntaggedImage() {
         #expect(throws: (any Error).self) {
             _ = try ClusterConfiguration.make(

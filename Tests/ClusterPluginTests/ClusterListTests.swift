@@ -88,9 +88,19 @@ struct ClusterResourceTableTests {
             status: ClusterStatus(
                 state: .running,
                 nodes: [ClusterNodeState(name: "dev", status: .running)]))
-        #expect(ClusterResource.tableHeader == ["NAME", "NODES", "K8S VERSION", "STATE"])
-        #expect(info.tableRow == ["dev", "1", "v1.35.5", "running"])
+        #expect(ClusterResource.tableHeader == ["NAME", "NODES", "K8S VERSION", "STATE", "MTU"])
+        #expect(info.tableRow == ["dev", "1", "v1.35.5", "running", "-"])
         #expect(info.quietValue == "dev")
+    }
+
+    @Test func rowShowsTheClusterMTU() throws {
+        let info = ClusterResource(
+            configuration: try ClusterConfiguration.make(
+                name: "dev", nodeImage: "docker.io/kindest/node:v1.35.5", remove: false, workers: 0, cni: nil, fqdn: nil, mtu: 1500),
+            status: ClusterStatus(
+                state: .running,
+                nodes: [ClusterNodeState(name: "dev", status: .running)]))
+        #expect(info.tableRow == ["dev", "1", "v1.35.5", "running", "1500"])
     }
 
     @Test func degradedAndStoppedStateText() throws {

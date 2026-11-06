@@ -172,4 +172,20 @@ struct TestNetworkMTUConfigSerial {
             }
         }
     }
+
+    @Test func testClusterOptionBeatsConfig() async throws {
+        try await ContainerFixture.with { f in
+            try Self.useConfiguration("[network]\nmtu = 1400\n", in: f)
+            let name = "cluster-\(f.testID)"
+            f.addCleanup { _ = try? f.run(["cluster", "delete", "--name", name]) }
+
+            try f.restoreWarmupImage(.kindestNodeV1_35_5)
+            try f.run(["cluster", "create", "--name", name, "--mtu", "1500"]).check()
+
+            let interface = try f.doExec(name, cmd: ["sh", "-c", "ip route show default | awk '{print $5}'"])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let output = try f.doExec(name, cmd: ["ip", "link", "show", interface])
+            #expect(output.contains("mtu 1500"), "expected mtu 1500 on \(name): \(output)")
+        }
+    }
 }

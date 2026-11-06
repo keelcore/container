@@ -1637,7 +1637,7 @@ Creates and starts a local Kubernetes cluster and optional worker nodes. Pulls t
 **Usage**
 
 ```bash
-container cluster create [--name <name>] [--node-image <image>] [--cni <path>] [--workers <n>] [--shared-image-store] [--rm] [<resource options>] [--debug]
+container cluster create [--name <name>] [--node-image <image>] [--cni <path>] [--workers <n>] [--shared-image-store] [--network <name>[,mtu=VALUE]] [--mtu <mtu>] [--rm] [<resource options>] [--debug]
 ```
 
 **Options**
@@ -1647,6 +1647,8 @@ container cluster create [--name <name>] [--node-image <image>] [--cni <path>] [
 *   `--cni <path>`: Optional path to a CNI manifest to apply, or `NONE` (case-insensitive) to skip installing a CNI. If not provided, the bundled kindnet CNI is used. With `NONE`, the command returns without waiting for nodes to become `Ready`, since that requires a CNI; apply your own afterward with `kubectl apply`.
 *   `--workers <n>`: Number of worker nodes to create (default: `0`, meaning the control-plane node also acts as a worker)
 *   `--shared-image-store`: Let nodes pull images from the local image store (default: off). See [Container cluster](cluster.md).
+*   `--network <name>[,mtu=VALUE]`: Attach the nodes to a network (default: the builtin network)
+*   `--mtu <mtu>`: MTU of the nodes' network interface. Cannot be combined with an `mtu` value in `--network`. See [Configure the network MTU](networking.md#configure-the-network-mtu).
 *   `--rm`: Remove the cluster container after it stops
 
 **Resource Options**

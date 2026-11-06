@@ -222,7 +222,7 @@ public struct Utility {
                 builtinNetworkId: builtinNetworkId,
                 networks: parsedNetworks,
                 dnsDomain: containerSystemConfig.dns.domain,
-                defaultMTU: NetworkMTU.resolve(config: containerSystemConfig.network.mtu),
+                defaultMTU: defaultMTU(containerSystemConfig: containerSystemConfig),
                 networkMTUs: networkMTUs,
             )
         }
@@ -271,6 +271,11 @@ public struct Utility {
         config.runtimeHandler = management.runtime ?? "\(runtimePrefix)\(requestedPlatform.os)"
 
         return (config, kernel, management.initImage)
+    }
+
+    /// The MTU for an attachment that does not set its own.
+    public static func defaultMTU(containerSystemConfig: ContainerSystemConfig) throws -> UInt32 {
+        try NetworkMTU.resolve(config: containerSystemConfig.network.mtu)
     }
 
     static func getAttachmentConfigurations(

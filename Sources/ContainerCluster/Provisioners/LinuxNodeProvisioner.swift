@@ -38,11 +38,13 @@ public struct LinuxNodeProvisioner: NodeProvisioner {
     private let containerSystemConfig: ContainerSystemConfig
     private let fqdn: String?
     private let sharedImageStore: Bool
+    private let network: String?
 
     /// - Parameters:
     ///   - name: Name of this node. The control plane is named after the cluster;
     ///     workers use `ClusterHelper.workerName(cluster:index:)`.
     ///   - clusterName: The cluster this node belongs to.
+    ///   - network: The network to attach to, in `--network` form. Defaults to the builtin network.
     public init(
         name: String,
         clusterName: String,
@@ -55,7 +57,8 @@ public struct LinuxNodeProvisioner: NodeProvisioner {
         remove: Bool = false,
         containerSystemConfig: ContainerSystemConfig,
         fqdn: String? = nil,
-        sharedImageStore: Bool = false
+        sharedImageStore: Bool = false,
+        network: String? = nil
     ) throws {
         guard !roles.isEmpty else {
             throw ContainerizationError(.invalidArgument, message: "LinuxNode roles must not be empty")
@@ -79,6 +82,7 @@ public struct LinuxNodeProvisioner: NodeProvisioner {
         self.containerSystemConfig = containerSystemConfig
         self.fqdn = fqdn
         self.sharedImageStore = sharedImageStore
+        self.network = network
     }
 
     public func provision(log: Logger) async throws {
@@ -122,7 +126,7 @@ public struct LinuxNodeProvisioner: NodeProvisioner {
             maskedPaths: [],
             mounts: [],
             name: name,
-            networks: [],
+            networks: network.map { [$0] } ?? [],
             os: "linux",
             platform: nil,
             publishPorts: publishPorts,

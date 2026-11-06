@@ -61,10 +61,52 @@ public struct ClusterCreate: AsyncParsableCommand {
     @Flag(help: "Let nodes pull images from the local image store")
     var sharedImageStore = false
 
+    @Option(name: .long, help: "Attach the nodes to a network (format: <name>[,mtu=VALUE])")
+    var network: String?
+
+    @Option(
+        name: .long, help: "MTU of the nodes' network interface",
+        transform: {
+            try NetworkMTU.parse($0)
+        })
+    var mtu: UInt32?
+
     public func validate() throws {
         guard workers <= ClusterConfiguration.maxWorkers else {
             throw ValidationError("--workers must be at most \(ClusterConfiguration.maxWorkers)")
         }
+        if let network {
+            let parsed = try Parser.network(network)
+            // Every node attaches with this value, and nodes cannot share a MAC address or DNS alias.
+            guard parsed.macAddress == nil, parsed.aliases.isEmpty else {
+                throw ValidationError("--network accepts only <name>[,mtu=VALUE] on a cluster")
+            }
+            guard parsed.mtu == nil || mtu == nil else {
+                throw ValidationError("--mtu cannot be combined with an mtu value in --network")
+            }
+        }
+    }
+
+    /// The MTU the nodes attach with.
+    func nodeMTU(networkMTU: UInt32?, defaultMTU: UInt32) throws -> UInt32 {
+        try mtu ?? network.flatMap { try Parser.network($0).mtu } ?? networkMTU ?? defaultMTU
+    }
+
+    /// The network the nodes attach to, in `--network` form, if an option sets one.
+    func nodeNetwork(builtin: String?) throws -> String? {
+        if let network {
+            guard let mtu else {
+                return network
+            }
+            return "\(try Parser.network(network).name),mtu=\(mtu)"
+        }
+        guard let mtu else {
+            return nil
+        }
+        guard let builtin else {
+            throw ContainerizationError(.invalidState, message: "builtin network is not present")
+        }
+        return "\(builtin),mtu=\(mtu)"
     }
 
     public func run() async throws {
@@ -80,6 +122,17 @@ public struct ClusterCreate: AsyncParsableCommand {
 
         let containerSystemConfig: ContainerSystemConfig = try await ClientHealthCheck.loadContainerSystemConfig()
         let fqdn = ClusterHelper.fqdn(for: name, domain: containerSystemConfig.dns.domain)
+        let networkClient = NetworkClient()
+        let builtin = try await networkClient.builtin
+        var selectedNetwork = builtin
+        if let network = self.network {
+            selectedNetwork = try await networkClient.get(id: Parser.network(network).name)
+        }
+        let resolvedMTU = try nodeMTU(
+            networkMTU: selectedNetwork?.configuration.mtu,
+            defaultMTU: Utility.defaultMTU(containerSystemConfig: containerSystemConfig)
+        )
+        let network = try nodeNetwork(builtin: builtin?.id)
 
         // Validates the name, node image and worker count; fails before provisioning the node VM.
         let configuration = try ClusterConfiguration.make(
@@ -89,7 +142,8 @@ public struct ClusterCreate: AsyncParsableCommand {
             sharedImageStore: sharedImageStore,
             workers: workers,
             cni: cni,
-            fqdn: fqdn
+            fqdn: fqdn,
+            mtu: resolvedMTU
         )
 
         let isTTY = isatty(FileHandle.standardError.fileDescriptor) == 1
@@ -121,7 +175,8 @@ public struct ClusterCreate: AsyncParsableCommand {
             remove: remove,
             containerSystemConfig: containerSystemConfig,
             fqdn: fqdn,
-            sharedImageStore: sharedImageStore
+            sharedImageStore: sharedImageStore,
+            network: network
         )
         let workerNodes = try (0..<Int(workers)).map { index in
             try LinuxNodeProvisioner(
@@ -135,7 +190,8 @@ public struct ClusterCreate: AsyncParsableCommand {
                 maxConcurrentDownloads: imageFetchFlags.maxConcurrentDownloads,
                 remove: remove,
                 containerSystemConfig: containerSystemConfig,
-                sharedImageStore: sharedImageStore
+                sharedImageStore: sharedImageStore,
+                network: network
             )
         }
 

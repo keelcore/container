@@ -270,7 +270,7 @@ public struct ClusterHelper {
 }
 
 extension ClusterResource: ListDisplayable {
-    static var tableHeader: [String] { ["NAME", "NODES", "K8S VERSION", "STATE"] }
+    static var tableHeader: [String] { ["NAME", "NODES", "K8S VERSION", "STATE", "MTU"] }
 
     var stateText: String {
         switch status.state {
@@ -284,7 +284,7 @@ extension ClusterResource: ListDisplayable {
     }
 
     var tableRow: [String] {
-        [configuration.name, "\(status.nodes.count)", configuration.kubernetesVersion, stateText]
+        [configuration.name, "\(status.nodes.count)", configuration.kubernetesVersion, stateText, configuration.mtu.map(String.init) ?? "-"]
     }
 
     var quietValue: String { configuration.name }
